@@ -1,0 +1,66 @@
+# 静的コンテンツをGitHub Pagesにデプロイするためのシンプルなワークフロー
+name: Deploy static content to Pages
+
+on:
+  # mainブランチを対象としたプッシュ時に実行
+  push:
+    branches: ["main"]
+
+  # Actionsタブから手動で実行することも可能
+  workflow_dispatch:
+
+# GITHUB_TOKENの権限を設定し、GitHub Pagesへのデプロイを許可
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時デプロイを1つに制限
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # 'deploy'という単一のジョブ
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # リポジトリ名を取得して後続のステップで利用
+      - name: Get Repository Name
+        id: version
+        run: |
+          REPOSITORY=$(echo ${{ github.repository }} | sed -e "s#.*/##")
+          echo "repository=$REPOSITORY" >> $GITHUB_OUTPUT
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.3' # 使用するFlutterのバージョンを指定
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web app
+        # --base-href オプションでリポジトリ名を指定することが重要
+        run: flutter build web --release --base-href /${{ steps.version.outputs.repository }}/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # ビルド成果物（build/web）をアップロード
+          path: './build/web'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
