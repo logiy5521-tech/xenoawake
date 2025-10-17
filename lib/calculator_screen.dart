@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,11 +33,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
 
   Future<void> _loadSavedValues() async {
     final prefs = await SharedPreferences.getInstance();
-
     _coreController.text = prefs.getString('core') ?? '0';
     _crystalController.text = prefs.getString('crystal') ?? '0';
     _biscuitController.text = prefs.getString('biscuit') ?? '0';
-
     _calculateOptimalBuild();
   }
 
@@ -81,7 +81,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _usedCrystal = selectedResult['usedCrystal'];
       _usedBiscuit = selectedResult['usedBiscuit'];
     });
-
     _saveInputValues();
   }
 
@@ -172,7 +171,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       }
     }
 
-    // totalPets分だけ返す（余分なデータを含めない）
     return levels.take(totalPets).toList();
   }
 
@@ -335,7 +333,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     children: [
                       _buildBadge('覚醒: ${_optimalAwakening!.level}', const [Color(0xFFFF6B6B), Color(0xFFEE5A6F)]),
                       const SizedBox(width: 8),
-                      _buildBadge('サポート: $_optimalSupportSlots体', const [Color(0xFF4FACFE), Color(0xFF00F2FE)]),
+                      _buildBadge('サポート: $_optimalSupportSlots体', const [Color(0xFF4FACFE), Color(0x00F2FE)]),
                     ],
                   ),
                 ],
@@ -405,10 +403,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     int maxResonanceRatePets = _optimalAwakening!.resonanceRate > 0
         ? ((100 - 10) / _optimalAwakening!.resonanceRate).floor()
         : 999;
-
-    // 奇数の場合は確率を1つ多く
-    int resonanceRateCount = (totalSlots1And2 + 1) ~/ 2; // 切り上げ
-    int resonanceDamageCount = totalSlots1And2 ~/ 2; // 切り捨て
+    int resonanceRateCount = (totalSlots1And2 + 1) ~/ 2;
+    int resonanceDamageCount = totalSlots1And2 ~/ 2;
 
     if (resonanceRateCount > maxResonanceRatePets) {
       resonanceRateCount = maxResonanceRatePets;
@@ -436,7 +432,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _buildTableHeader('シールド', true),
       _buildTableHeader('氷結', true),
     ];
-
     if (useAttackPercent) headers.add(_buildTableHeader('攻撃+(%)', true));
 
     return TableRow(
@@ -468,7 +463,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       String skill3 = '-';
       String skill4 = '-';
 
-      // スロット1: 確率 or ダメージ or 攻撃+
       if (slots >= 1) {
         if (resonanceRateRemaining > 0) {
           skillCol1 = '${resonanceRate.toStringAsFixed(1)}%';
@@ -481,7 +475,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         }
       }
 
-      // スロット2: ダメージ or 確率 or 攻撃+
       if (slots >= 2) {
         if (resonanceDamageRemaining > 0) {
           skillCol2 = '${resonanceDamage.toStringAsFixed(1)}%';
@@ -662,6 +655,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   Widget _buildNumberField(String label, TextEditingController controller, Color accentColor) {
+    // PCかどうかを判定（Web または デスクトップOS）
+    final bool isPCEnvironment = kIsWeb || (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -674,6 +670,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           controller: controller,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          // PCの場合、IME予測とオートコレクトを無効化
+          enableSuggestions: !isPCEnvironment,
+          autocorrect: !isPCEnvironment,
           style: const TextStyle(fontSize: 14, color: Color(0xFF2C3E50)),
           decoration: InputDecoration(
             border: OutlineInputBorder(
@@ -701,7 +700,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
 
   String _formatNumber(int number) {
     if (number >= 1000) {
-      // 1000以上は全てK表示、3桁ごとにカンマ
       int thousands = number ~/ 1000;
       String formattedThousands = thousands.toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
