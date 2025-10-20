@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,704 +7,539 @@ class CalculatorScreen extends StatefulWidget {
   const CalculatorScreen({super.key});
 
   @override
-  State<CalculatorScreen> createState() => _CalculatorScreenState();
+  State createState() => _CalculatorScreenState();
 }
 
 class _CalculatorScreenState extends State<CalculatorScreen> {
-  final TextEditingController _coreController = TextEditingController(text: "0");
-  final TextEditingController _crystalController = TextEditingController(text: "0");
-  final TextEditingController _biscuitController = TextEditingController(text: "0");
+  static const int slot3CoreThreshold = 21;
 
-  AwakeningData? _optimalAwakening;
-  int _optimalSupportSlots = 2;
-  int _mainPetLevel = 1;
-  List<int> _supportPetLevels = [1, 1, 1];
-  int _usedCore = 0;
-  int _usedCrystal = 0;
-  int _usedBiscuit = 0;
+  static const _prefsCore = 'resource_core';
+  static const _prefsCrystal = 'resource_crystal';
+  static const _prefsBiscuit = 'resource_biscuit';
+
+  final _coreCtrl = TextEditingController();
+  final _crystalCtrl = TextEditingController();
+  final _biscuitCtrl = TextEditingController();
+
+  Map<String, dynamic>? res2, res3;
+  String? inputError;
 
   @override
   void initState() {
     super.initState();
-    _loadSavedValues();
+    _loadInputs();
   }
 
-  Future<void> _loadSavedValues() async {
+  Future<void> _loadInputs() async {
     final prefs = await SharedPreferences.getInstance();
-    _coreController.text = prefs.getString('core') ?? '0';
-    _crystalController.text = prefs.getString('crystal') ?? '0';
-    _biscuitController.text = prefs.getString('biscuit') ?? '0';
-    _calculateOptimalBuild();
+    _coreCtrl.text = prefs.getString(_prefsCore) ?? '';
+    _crystalCtrl.text = prefs.getString(_prefsCrystal) ?? '';
+    _biscuitCtrl.text = prefs.getString(_prefsBiscuit) ?? '';
+    Future.delayed(const Duration(milliseconds: 30), _calcAll);
   }
 
-  Future<void> _saveInputValues() async {
+  Future<void> _saveInputs() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('core', _coreController.text);
-    await prefs.setString('crystal', _crystalController.text);
-    await prefs.setString('biscuit', _biscuitController.text);
+    await prefs.setString(_prefsCore, _coreCtrl.text);
+    await prefs.setString(_prefsCrystal, _crystalCtrl.text);
+    await prefs.setString(_prefsBiscuit, _biscuitCtrl.text);
   }
 
-  void _calculateOptimalBuild() {
-    if (_ownedCore == 0 && _ownedCrystal == 0 && _ownedBiscuit == 0) {
-      _resetToInitialState();
+  bool _isNumeric(String s) => RegExp(r'^\d+$').hasMatch(s);
+
+  void _calcAll() {
+    if (!_isNumeric(_coreCtrl.text) || !_isNumeric(_crystalCtrl.text) || !_isNumeric(_biscuitCtrl.text)) {
+      setState(() {
+        inputError = '半角数字で入力してください';
+        res2 = null;
+        res3 = null;
+      });
       return;
     }
 
-    var result2 = _calculateBuildForSlots(2);
-    var result3 = _calculateBuildForSlots(3);
-
-    if (result3 == null && result2 == null) {
-      _resetToInitialState();
-      return;
-    }
-
-    Map<String, dynamic>? selectedResult;
-    if (result3 != null && result2 != null) {
-      selectedResult = (result3['totalSkillEffect'] > result2['totalSkillEffect']) ? result3 : result2;
-    } else {
-      selectedResult = result2 ?? result3;
-    }
-
-    if (selectedResult == null) {
-      _resetToInitialState();
-      return;
-    }
+    inputError = null;
+    int core = int.tryParse(_coreCtrl.text) ?? 0;
+    int crystal = int.tryParse(_crystalCtrl.text) ?? 0;
+    int biscuit = (int.tryParse(_biscuitCtrl.text) ?? 0) * 1000;
 
     setState(() {
-      _optimalSupportSlots = selectedResult!['supportSlots'];
-      _optimalAwakening = selectedResult['awakening'];
-      _mainPetLevel = selectedResult['mainLevel'];
-      _supportPetLevels = selectedResult['supportLevels'];
-      _usedCore = selectedResult['usedCore'];
-      _usedCrystal = selectedResult['usedCrystal'];
-      _usedBiscuit = selectedResult['usedBiscuit'];
+      res2 = _calcOptimal(2, core, crystal, biscuit);
+      res3 = _calcOptimal(3, core, crystal, biscuit);
     });
-    _saveInputValues();
+    _saveInputs();
   }
 
-  void _resetToInitialState() {
-    setState(() {
-      _optimalAwakening = null;
-      _optimalSupportSlots = 2;
-      _mainPetLevel = 1;
-      _supportPetLevels = [1, 1, 1];
-      _usedCore = 0;
-      _usedCrystal = 0;
-      _usedBiscuit = 0;
-    });
-  }
+  Map<String, dynamic>? _calcOptimal(int slots, int core, int crystal, int biscuit) {
+    int unlockCore = 0, unlockCrystal = 0;
 
-  Map<String, dynamic>? _calculateBuildForSlots(int supportSlots) {
-    int unlockCoresCost = (supportSlots >= 3) ? 14 : 0;
-    int unlockCrystalCost = (supportSlots >= 3) ? 380 : 0;
-    int unlockBiscuitCost = (supportSlots >= 3) ? biscuitCosts[60]! * 2 : 0;
+    if (slots == 3) {
+      int accCore = 0, accCrystal = 0, i = 0;
+      while (i < awakeningTable.length) {
+        accCore += awakeningTable[i].totalCore;
+        accCrystal += awakeningTable[i].totalCrystal;
+        if (accCore >= slot3CoreThreshold) break;
+        i++;
+      }
+      if (accCore < slot3CoreThreshold) {
+        return {
+          "slot3_unlocked": false,
+          "remain_core": slot3CoreThreshold - accCore,
+          "remain_crystal": (i < awakeningTable.length) ? (awakeningTable[i].totalCrystal - accCrystal) : 0,
+        };
+      }
+      unlockCore = accCore;
+      unlockCrystal = accCrystal;
 
-    if (_ownedCore < unlockCoresCost || _ownedCrystal < unlockCrystalCost || _ownedBiscuit < unlockBiscuitCost) {
-      return null;
+      // unlockCore/unlockCrystal は slot3 開放のみ
+      int usableCore = core - unlockCore;
+      int usableCrystal = crystal - unlockCrystal;
+      if (usableCore < 0 || usableCrystal < 0 || biscuit < 0) return null;
     }
 
-    int availableCore = _ownedCore - unlockCoresCost;
-    int availableCrystal = _ownedCrystal - unlockCrystalCost;
-    int availableBiscuit = _ownedBiscuit - unlockBiscuitCost;
-
-    AwakeningData awakening = _findMaxAwakeningLevel(availableCore, availableCrystal);
-    List<int> petLevels = _calculateOptimalPetLevels(supportSlots, availableBiscuit);
-    petLevels.sort((a, b) => b.compareTo(a));
-
-    int mainLevel = petLevels[0];
-    List<int> supportLevels = petLevels.sublist(1, supportSlots + 1);
-
-    double totalSkillEffect = _calculateTotalSkillEffect(awakening, petLevels.take(1 + supportSlots).toList());
-
-    int usedBiscuit = unlockBiscuitCost;
-    for (int level in petLevels.take(1 + supportSlots)) {
-      usedBiscuit += biscuitCosts[level]!;
-    }
-
-    return {
-      'supportSlots': supportSlots,
-      'awakening': awakening,
-      'mainLevel': mainLevel,
-      'supportLevels': supportLevels,
-      'usedCore': awakening.totalCore + unlockCoresCost,
-      'usedCrystal': awakening.totalCrystal + unlockCrystalCost,
-      'usedBiscuit': usedBiscuit,
-      'totalSkillEffect': totalSkillEffect,
-    };
-  }
-
-  AwakeningData _findMaxAwakeningLevel(int availableCore, int availableCrystal) {
-    AwakeningData result = awakeningTable.first;
-    for (var data in awakeningTable) {
-      if (data.totalCore <= availableCore && data.totalCrystal <= availableCrystal) {
-        result = data;
-      } else {
+    AwakeningData? maxAwk;
+    for (var a in awakeningTable.reversed) {
+      if (a.totalCore <= (slots == 3 ? core - unlockCore : core) &&
+          a.totalCrystal <= (slots == 3 ? crystal - unlockCrystal : crystal)) {
+        maxAwk = a;
         break;
       }
     }
-    return result;
-  }
+    if (maxAwk == null) return null; // 消費不可時
 
-  List<int> _calculateOptimalPetLevels(int supportSlots, int availableBiscuit) {
-    int totalPets = 1 + supportSlots;
-    List<int> levels = List.filled(totalPets, 1);
-    int remainingBiscuit = availableBiscuit;
+    int petCount = 1 + slots;
+    final lvOpts = [90, 60, 30, 1];
+    List<List<int>> patterns = _lvPatterns(petCount, lvOpts, biscuit);
 
-    for (int i = 0; i < totalPets && remainingBiscuit >= biscuitCosts[30]!; i++) {
-      levels[i] = 30;
-      remainingBiscuit -= biscuitCosts[30]!;
-    }
-
-    for (int i = 0; i < totalPets; i++) {
-      if (levels[i] == 30 && remainingBiscuit >= (biscuitCosts[60]! - biscuitCosts[30]!)) {
-        levels[i] = 60;
-        remainingBiscuit -= (biscuitCosts[60]! - biscuitCosts[30]!);
+    _PatternScore? best;
+    for (final pat in patterns) {
+      List<int> sorted = [...pat]..sort((b, a) => a.compareTo(b));
+      var skills = _skillDetail(maxAwk, sorted);
+      var scoreArr = [
+        skills['共鳴確率'] ?? 0.0,
+        skills['共鳴ダメージ'] ?? 0.0,
+        skills['シールド'] ?? 0.0,
+        skills['氷結'] ?? 0.0,
+        skills['攻撃%'] ?? 0.0,
+      ];
+      if (best == null || _betterScore(scoreArr, best.scoreArr)) {
+        best = _PatternScore(sorted, skills, scoreArr);
       }
     }
+    if (best == null) return null;
 
-    for (int i = 0; i < totalPets; i++) {
-      if (levels[i] == 60 && remainingBiscuit >= (biscuitCosts[90]! - biscuitCosts[60]!)) {
-        levels[i] = 90;
-        remainingBiscuit -= (biscuitCosts[90]! - biscuitCosts[60]!);
-      }
-    }
-
-    return levels.take(totalPets).toList();
-  }
-
-  double _calculateTotalSkillEffect(AwakeningData awakening, List<int> levels) {
-    int totalSlots1And2 = 0;
-    int totalSlots3 = 0;
-    int totalSlots4 = 0;
-
-    for (int level in levels) {
-      int slots = _getSkillSlots(level);
-      if (slots >= 1) totalSlots1And2++;
-      if (slots >= 2) totalSlots1And2++;
-      if (slots >= 3) totalSlots3++;
-      if (slots >= 4) totalSlots4++;
-    }
-
-    int maxResonanceRatePets = awakening.resonanceRate > 0 ? ((100 - 10) / awakening.resonanceRate).floor() : 999;
-    int resonanceRateCount = totalSlots1And2 ~/ 2;
-    int resonanceDamageCount = totalSlots1And2 - resonanceRateCount;
-
-    if (resonanceRateCount > maxResonanceRatePets) {
-      resonanceRateCount = maxResonanceRatePets;
-      resonanceDamageCount = totalSlots1And2 - resonanceRateCount;
-    }
-
-    double totalResonanceRate = (awakening.resonanceRate * resonanceRateCount) + 10;
-    double totalResonanceDamage = (awakening.resonanceDamage * resonanceDamageCount) + 10;
-
-    return totalResonanceRate + totalResonanceDamage + awakening.shield * totalSlots3 + awakening.freeze * totalSlots4;
-  }
-
-  int _getSkillSlots(int level) {
-    if (level >= 90) return 4;
-    if (level >= 60) return 3;
-    if (level >= 30) return 2;
-    return 1;
-  }
-
-  int get _ownedCore => int.tryParse(_coreController.text) ?? 0;
-  int get _ownedCrystal => int.tryParse(_crystalController.text) ?? 0;
-  int get _ownedBiscuit => (int.tryParse(_biscuitController.text) ?? 0) * 1000;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'XenoPets覚醒計算',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
-            ),
-            Text('by Logi@YAMATO', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        elevation: 1,
-      ),
-      backgroundColor: const Color(0xFFF0F4F8),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildResourceInput(),
-                const SizedBox(height: 16),
-                _buildPetDetailsAndSkills(),
-                const SizedBox(height: 16),
-                _buildResultDisplay(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResourceInput() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.white, Color(0xFFF8FBFF)],
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '所持リソース',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _buildNumberField('コア', _coreController, const Color(0xFF6366F1))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildNumberField('覚醒クリスタル', _crystalController, const Color(0xFF8B5CF6))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildNumberField('ビスケット(K)', _biscuitController, const Color(0xFFEC4899))),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPetDetailsAndSkills() {
-    if (_optimalAwakening == null) {
-      return Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: const Padding(
-          padding: EdgeInsets.all(16),
-          child: Center(
-            child: Text('リソースを入力してください', style: TextStyle(fontSize: 14, color: Colors.grey)),
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.white, Color(0xFFFFF9F0)],
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    '最適編成',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
-                  ),
-                  Row(
-                    children: [
-                      _buildBadge('覚醒: ${_optimalAwakening!.level}', const [Color(0xFFFF6B6B), Color(0xFFEE5A6F)]),
-                      const SizedBox(width: 8),
-                      _buildBadge('サポート: $_optimalSupportSlots体', const [Color(0xFF4FACFE), Color(0x00F2FE)]),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildPetTable(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBadge(String text, List<Color> gradientColors) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: gradientColors),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: gradientColors[0].withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildPetTable() {
-    List<int> allLevels = [_mainPetLevel, ..._supportPetLevels.take(_optimalSupportSlots)];
-    var skillDistribution = _calculateSkillDistribution(allLevels);
-
-    return Table(
-      border: TableBorder.all(color: const Color(0xFFE0E0E0), width: 1, borderRadius: BorderRadius.circular(8)),
-      columnWidths: {
-        0: const FlexColumnWidth(1.5),
-        1: const FlexColumnWidth(1),
-        2: const FlexColumnWidth(1.5),
-        3: const FlexColumnWidth(1.8),
-        4: const FlexColumnWidth(1.5),
-        5: const FlexColumnWidth(1.5),
-        if (skillDistribution['useAttackPercent']) 6: const FlexColumnWidth(1.5),
-      },
-      children: [
-        _buildTableHeaderRow(skillDistribution['useAttackPercent']),
-        ..._buildPetTableRows(allLevels, skillDistribution),
-        _buildTotalRow(skillDistribution),
-      ],
-    );
-  }
-
-  Map<String, dynamic> _calculateSkillDistribution(List<int> levels) {
-    int totalSlots1And2 = 0;
-    int totalSlots3 = 0;
-    int totalSlots4 = 0;
-
-    for (int level in levels) {
-      int slots = _getSkillSlots(level);
-      if (slots >= 1) totalSlots1And2++;
-      if (slots >= 2) totalSlots1And2++;
-      if (slots >= 3) totalSlots3++;
-      if (slots >= 4) totalSlots4++;
-    }
-
-    int maxResonanceRatePets = _optimalAwakening!.resonanceRate > 0
-        ? ((100 - 10) / _optimalAwakening!.resonanceRate).floor()
-        : 999;
-    int resonanceRateCount = (totalSlots1And2 + 1) ~/ 2;
-    int resonanceDamageCount = totalSlots1And2 ~/ 2;
-
-    if (resonanceRateCount > maxResonanceRatePets) {
-      resonanceRateCount = maxResonanceRatePets;
-      resonanceDamageCount = totalSlots1And2 - resonanceRateCount;
-    }
-
-    bool useAttackPercent = (resonanceRateCount + resonanceDamageCount) < totalSlots1And2;
+    final usedBiscuit = best.lvPat.fold<int>(0, (sum, lv) => sum + (biscuitCosts[lv] ?? 0));
 
     return {
-      'resonanceRateCount': resonanceRateCount,
-      'resonanceDamageCount': resonanceDamageCount,
-      'totalSlots3': totalSlots3,
-      'totalSlots4': totalSlots4,
-      'totalSlots1And2': totalSlots1And2,
-      'useAttackPercent': useAttackPercent,
+      'awakening': maxAwk,
+      'petLevels': best.lvPat,
+      'skills': best.skills,
+      // 覚醒素材消費（maxAwk 分）
+      'usedCore': maxAwk.totalCore,
+      'usedCrystal': maxAwk.totalCrystal,
+      'usedBiscuit': usedBiscuit,
+      "slot3_unlocked": slots == 3,
+      "unlockCore": unlockCore,
+      "unlockCrystal": unlockCrystal,
     };
   }
 
-  TableRow _buildTableHeaderRow(bool useAttackPercent) {
-    List<Widget> headers = [
-      _buildTableHeader('ペット', true),
-      _buildTableHeader('LV', true),
-      _buildTableHeader('共鳴確率', true),
-      _buildTableHeader('共鳴ダメージ', true),
-      _buildTableHeader('シールド', true),
-      _buildTableHeader('氷結', true),
-    ];
-    if (useAttackPercent) headers.add(_buildTableHeader('攻撃+(%)', true));
+  List<List<int>> _lvPatterns(int count, List<int> opts, int limit) {
+    List<List<int>> res = [];
+    void dfs(int idx, List<int> cur, int used) {
+      if (idx == count) {
+        res.add(List<int>.from(cur));
+        return;
+      }
+      for (var lv in opts) {
+        int add = (biscuitCosts[lv] ?? 0);
+        if (used + add > limit) continue;
+        cur.add(lv);
+        dfs(idx + 1, cur, used + add);
+        cur.removeLast();
+      }
+    }
 
-    return TableRow(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFF667EEA), Color(0xFF764BA2)]),
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
+    dfs(0, [], 0);
+    return res;
+  }
+
+  bool _betterScore(List<double> a, List<double> b) {
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] > b[i]) return true;
+      if (a[i] < b[i]) return false;
+    }
+    return false;
+  }
+
+  Map<String, double> _skillDetail(AwakeningData a, List<int> levels) {
+    int slotsAll = 0, slots3 = 0, slots4 = 0;
+    for (var lv in levels) {
+      int s = _slots(lv);
+      slotsAll += (s >= 1) ? 1 : 0;
+      slotsAll += (s >= 2) ? 1 : 0;
+      if (s >= 3) slots3++;
+      if (s >= 4) slots4++;
+    }
+    double resSum = a.resonanceRate * slotsAll;
+    double maxRes = resSum.clamp(0, 100);
+    double atk = resSum > 100 ? a.attackPercent * ((resSum - 100) / (a.resonanceRate > 0 ? a.resonanceRate : 1)) : 0;
+    return {
+      '共鳴確率': maxRes,
+      '共鳴ダメージ': a.resonanceDamage * slotsAll,
+      '攻撃%': atk,
+      'シールド': a.shield * slots3,
+      '氷結': a.freeze * slots4,
+    };
+  }
+
+  int _slots(int lv) {
+    if (lv >= 90) return 4;
+    if (lv >= 60) return 3;
+    if (lv >= 30) return 2;
+    return 1;
+  }
+
+  Widget _inputField(String label, TextEditingController ctrl, {String? suffix, IconData? icon}) {
+    return TextField(
+      controller: ctrl,
+      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+        suffixText: suffix,
+        prefixIcon: icon != null ? Icon(icon, size: 28) : null,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFF),
+        hintText: 'ここに数字を入力',
       ),
-      children: headers,
+      autofillHints: const [],
+      onChanged: (_) => _calcAll(),
     );
   }
 
-  List<TableRow> _buildPetTableRows(List<int> levels, Map<String, dynamic> distribution) {
-    List<TableRow> rows = [];
-    List<String> labels = ['メイン', 'サポート1', 'サポート2', 'サポート3'];
-
-    double resonanceRate = _optimalAwakening!.resonanceRate;
-    double resonanceDamage = _optimalAwakening!.resonanceDamage;
-    double shield = _optimalAwakening!.shield;
-    double freeze = _optimalAwakening!.freeze;
-    double attackPercent = _optimalAwakening!.attackPercent;
-
-    int resonanceRateRemaining = distribution['resonanceRateCount'];
-    int resonanceDamageRemaining = distribution['resonanceDamageCount'];
-
-    for (int i = 0; i < levels.length; i++) {
-      int slots = _getSkillSlots(levels[i]);
-      String skillCol1 = '-';
-      String skillCol2 = '-';
-      String skill3 = '-';
-      String skill4 = '-';
-
-      if (slots >= 1) {
-        if (resonanceRateRemaining > 0) {
-          skillCol1 = '${resonanceRate.toStringAsFixed(1)}%';
-          resonanceRateRemaining--;
-        } else if (resonanceDamageRemaining > 0) {
-          skillCol1 = '${resonanceDamage.toStringAsFixed(1)}%';
-          resonanceDamageRemaining--;
-        } else if (distribution['useAttackPercent']) {
-          skillCol1 = '${attackPercent.toStringAsFixed(1)}%';
-        }
-      }
-
-      if (slots >= 2) {
-        if (resonanceDamageRemaining > 0) {
-          skillCol2 = '${resonanceDamage.toStringAsFixed(1)}%';
-          resonanceDamageRemaining--;
-        } else if (resonanceRateRemaining > 0) {
-          skillCol2 = '${resonanceRate.toStringAsFixed(1)}%';
-          resonanceRateRemaining--;
-        } else if (distribution['useAttackPercent']) {
-          skillCol2 = '${attackPercent.toStringAsFixed(1)}%';
-        }
-      }
-
-      if (slots >= 3) skill3 = '${shield.toStringAsFixed(1)}%';
-      if (slots >= 4) skill4 = '${freeze.toStringAsFixed(1)}%';
-
-      List<Widget> cells = [
-        _buildTableCell(labels[i], bold: true),
-        _buildTableCell('${levels[i]}'),
-        _buildTableCell(skillCol1),
-        _buildTableCell(skillCol2),
-        _buildTableCell(skill3),
-        _buildTableCell(skill4),
-      ];
-
-      if (distribution['useAttackPercent']) {
-        String attackSkill = '-';
-        if (skillCol1.contains(attackPercent.toStringAsFixed(1)) ||
-            skillCol2.contains(attackPercent.toStringAsFixed(1))) {
-          attackSkill = '${attackPercent.toStringAsFixed(1)}%';
-        }
-        cells.add(_buildTableCell(attackSkill));
-      }
-
-      rows.add(TableRow(children: cells));
-    }
-
-    return rows;
-  }
-
-  TableRow _buildTotalRow(Map<String, dynamic> distribution) {
-    double resonanceRate = _optimalAwakening!.resonanceRate;
-    double resonanceDamage = _optimalAwakening!.resonanceDamage;
-    double shield = _optimalAwakening!.shield;
-    double freeze = _optimalAwakening!.freeze;
-    double attackPercent = _optimalAwakening!.attackPercent;
-
-    double totalResonanceRate = (resonanceRate * distribution['resonanceRateCount']) + 10;
-    double totalResonanceDamage = (resonanceDamage * distribution['resonanceDamageCount']) + 10;
-    double totalShield = shield * distribution['totalSlots3'];
-    double totalFreeze = freeze * distribution['totalSlots4'];
-
-    int attackCount =
-        distribution['totalSlots1And2'] - distribution['resonanceRateCount'] - distribution['resonanceDamageCount'];
-    double totalAttackPercent = attackPercent * attackCount;
-
-    List<Widget> cells = [
-      _buildTableCell('合計', bold: true),
-      _buildTableCell(''),
-      _buildTableCell('${totalResonanceRate.toStringAsFixed(1)}%', bold: true, color: const Color(0xFF10B981)),
-      _buildTableCell('${totalResonanceDamage.toStringAsFixed(1)}%', bold: true, color: const Color(0xFF10B981)),
-      _buildTableCell('${totalShield.toStringAsFixed(1)}%', bold: true, color: const Color(0xFF10B981)),
-      _buildTableCell('${totalFreeze.toStringAsFixed(1)}%', bold: true, color: const Color(0xFF10B981)),
-    ];
-
-    if (distribution['useAttackPercent']) {
-      cells.add(
-        _buildTableCell('${totalAttackPercent.toStringAsFixed(1)}%', bold: true, color: const Color(0xFF10B981)),
-      );
-    }
-
-    return TableRow(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFFFEF3C7), Color(0xFFFDE68A)]),
-        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(8), bottomRight: Radius.circular(8)),
-      ),
-      children: cells,
-    );
-  }
-
-  Widget _buildResultDisplay() {
+  Widget _inputCard() {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.white, Color(0xFFF0F9FF)],
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'リソース使用状況',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
+      elevation: 5,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.edit, color: Colors.indigo, size: 28),
+                SizedBox(width: 8),
+                Text('所持リソースを入力', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                _inputField('異獣コア', _coreCtrl, icon: Icons.circle),
+                _inputField('覚醒クリスタル', _crystalCtrl, icon: Icons.star),
+                _inputField('ビスケット(K)', _biscuitCtrl, icon: Icons.cookie),
+              ],
+            ),
+            if (inputError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(inputError!, style: const TextStyle(fontSize: 13, color: Colors.red)),
               ),
-              const SizedBox(height: 12),
-              Table(
-                border: TableBorder.all(
-                  color: const Color(0xFFE0E0E0),
-                  width: 1,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(2), 2: FlexColumnWidth(2)},
-                children: [
-                  TableRow(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(colors: [Color(0xFF667EEA), Color(0xFF764BA2)]),
-                      borderRadius: BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-                    ),
-                    children: [
-                      _buildTableHeader('リソース', true),
-                      _buildTableHeader('使用', true),
-                      _buildTableHeader('残り', true),
-                    ],
-                  ),
-                  _buildResourceTableRow('コア', _usedCore, _ownedCore - _usedCore),
-                  _buildResourceTableRow('覚醒クリスタル', _usedCrystal, _ownedCrystal - _usedCrystal),
-                  _buildResourceTableRow('ビスケット', _usedBiscuit, _ownedBiscuit - _usedBiscuit),
-                ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptimal(String title, Map<String, dynamic>? data, int slotCount) {
+    if (data != null && data['slot3_unlocked'] == false) {
+      return Card(
+        color: Colors.red.shade50,
+        margin: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
+          child: Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red[400], size: 26),
+              const SizedBox(width: 10),
+              Text(
+                'スロット3構成：実現不可\nあと異獣コア${data['remain_core']}個・クリスタル${data['remain_crystal']}個消費でスロット3解放',
+                style: const TextStyle(fontSize: 17, color: Colors.red),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  TableRow _buildResourceTableRow(String label, int used, int remaining) {
-    return TableRow(
-      children: [
-        _buildTableCell(label, bold: true),
-        _buildTableCell(_formatNumber(used)),
-        _buildTableCell(
-          _formatNumber(remaining),
-          bold: true,
-          color: remaining >= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTableHeader(String text, bool isHeader) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: isHeader ? Colors.white : const Color(0xFF2C3E50),
-        ),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  Widget _buildTableCell(String content, {bool bold = false, Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-      child: Center(
-        child: Text(
-          content,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
-            color: color ?? const Color(0xFF34495E),
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNumberField(String label, TextEditingController controller, Color accentColor) {
-    // PCかどうかを判定（Web または デスクトップOS）
-    final bool isPCEnvironment = kIsWeb || (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: accentColor),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          // PCの場合、IME予測とオートコレクトを無効化
-          enableSuggestions: !isPCEnvironment,
-          autocorrect: !isPCEnvironment,
-          style: const TextStyle(fontSize: 14, color: Color(0xFF2C3E50)),
-          decoration: InputDecoration(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: accentColor.withValues(alpha: 0.3)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: accentColor.withValues(alpha: 0.3)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: accentColor, width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            isDense: true,
-            filled: true,
-            fillColor: Colors.white,
-          ),
-          onChanged: (_) => _calculateOptimalBuild(),
-        ),
-      ],
-    );
-  }
-
-  String _formatNumber(int number) {
-    if (number >= 1000) {
-      int thousands = number ~/ 1000;
-      String formattedThousands = thousands.toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-        (Match m) => '${m[1]},',
       );
-      return '${formattedThousands}K';
+    } else if (data == null) {
+      return Card(
+        color: Colors.red.shade50,
+        margin: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red[400], size: 28),
+              const SizedBox(width: 10),
+              Text(
+                '$title: 実現不可（素材不足)',
+                style: const TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      );
     }
-    return number.toString();
+
+    final AwakeningData a = data['awakening'] as AwakeningData;
+    final List<int> petLv = (data['petLevels'] as List).cast<int>();
+    final skills = (data['skills'] as Map).cast<String, double>();
+    final usedCore = data['usedCore'] as int;
+    final usedCrystal = data['usedCrystal'] as int;
+    final usedBiscuit = data['usedBiscuit'] as int;
+
+    // 追加: unlock 分（スロット3開放コスト）
+    final unlockCoreUsed = data['unlockCore'] as int? ?? 0;
+    final unlockCrystalUsed = data['unlockCrystal'] as int? ?? 0;
+
+    // 入力値
+    final inputCore = int.tryParse(_coreCtrl.text) ?? 0;
+    final inputCrystal = int.tryParse(_crystalCtrl.text) ?? 0;
+    final inputBiscuit = (int.tryParse(_biscuitCtrl.text) ?? 0) * 1000;
+
+    // 修正: 残数は unlock + 覚醒本体の消費を合算して差し引く
+    final remainCore = inputCore - usedCore - unlockCoreUsed;
+    final remainCrystal = inputCrystal - usedCrystal - unlockCrystalUsed;
+    final remainBiscuit = inputBiscuit - usedBiscuit;
+
+    return Card(
+      elevation: 5,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Text(
+                  '最適編成案',
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.blue[900]),
+                ),
+                const SizedBox(width: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.red.shade400, borderRadius: BorderRadius.circular(24)),
+                  child: Text(
+                    '覚醒:${a.level}',
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.purple.shade400, borderRadius: BorderRadius.circular(24)),
+                  child: Text(
+                    'サポート:$slotCount体',
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                columns: const [
+                  DataColumn(label: Text('ペット')),
+                  DataColumn(label: Text('LV')),
+                  DataColumn(label: Text('共鳴確率')),
+                  DataColumn(label: Text('共鳴ダメージ')),
+                  DataColumn(label: Text('(シールド)')),
+                  DataColumn(label: Text('(氷結)')),
+                ],
+                rows:
+                    List.generate(
+                      petLv.length,
+                      (i) => DataRow(
+                        cells: [
+                          DataCell(Text(i == 0 ? 'メイン' : 'サポート$i')),
+                          DataCell(
+                            Text('${petLv[i]}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                          ),
+                          DataCell(Text('${a.resonanceRate.toStringAsFixed(1)}%')),
+                          DataCell(Text('${a.resonanceDamage.toStringAsFixed(1)}%')),
+                          DataCell(Text('${a.shield.toStringAsFixed(1)}%')),
+                          DataCell(Text('${a.freeze.toStringAsFixed(1)}%')),
+                        ],
+                      ),
+                    )..add(
+                      DataRow(
+                        color: WidgetStateProperty.all(Colors.yellow.shade50),
+                        cells: [
+                          const DataCell(Text('合計', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const DataCell(Text('—')),
+                          DataCell(
+                            Text(
+                              '${skills['共鳴確率']?.toStringAsFixed(1)}%',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              '${skills['共鳴ダメージ']?.toStringAsFixed(1)}%',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              '${skills['シールド']?.toStringAsFixed(1)}%',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              '${skills['氷結']?.toStringAsFixed(1)}%',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+              ),
+            ),
+            if (skills['攻撃%'] != null && (skills['攻撃%'] ?? 0) > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  '共鳴確率上限超過分は攻撃%で加算 → +${skills['攻撃%']?.toStringAsFixed(1)}%',
+                  style: TextStyle(color: Colors.pink[700], fontWeight: FontWeight.bold),
+                ),
+              ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: Colors.indigo.shade50),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  children: [
+                    const Text('リソース使用状況', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                    Table(
+                      columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(), 2: FlexColumnWidth()},
+                      children: [
+                        TableRow(
+                          children: [
+                            const Padding(padding: EdgeInsets.all(6), child: Text('コア')),
+                            Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Text(
+                                // 表示は maxAwk 分のみ（開放分は別途残数に反映）
+                                '$usedCore',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[900]),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Text(
+                                '$remainCore',
+                                style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        TableRow(
+                          children: [
+                            const Padding(padding: EdgeInsets.all(6), child: Text('覚醒クリスタル')),
+                            Padding(padding: const EdgeInsets.all(6), child: Text('$usedCrystal')),
+                            Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Text(
+                                '$remainCrystal',
+                                style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        TableRow(
+                          children: [
+                            const Padding(padding: EdgeInsets.all(6), child: Text('ビスケット')),
+                            Padding(padding: const EdgeInsets.all(6), child: Text('${usedBiscuit ~/ 1000}K')),
+                            Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Text(
+                                '${(remainBiscuit ~/ 1000)}K',
+                                style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        // 任意: 開放分の可視化
+                        if (unlockCoreUsed > 0 || unlockCrystalUsed > 0)
+                          TableRow(
+                            children: [
+                              const Padding(padding: EdgeInsets.all(6), child: Text('開放(参考)')),
+                              Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Text(
+                                  '+C:$unlockCoreUsed, +Cr:$unlockCrystalUsed',
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                              const Padding(padding: EdgeInsets.all(6), child: Text('')),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
+
+  @override
+  Widget build(BuildContext ctx) => Scaffold(
+    backgroundColor: const Color(0xFFF4F7FC),
+    appBar: AppBar(
+      title: const Text('XenoPets覚醒計算', style: TextStyle(fontWeight: FontWeight.bold)),
+      backgroundColor: Colors.indigo.shade700,
+      elevation: 2,
+    ),
+    body: Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _inputCard(),
+              const SizedBox(height: 12),
+              _buildOptimal('スロット2構成', res2, 2),
+              const SizedBox(height: 16),
+              _buildOptimal('スロット3構成', res3, 3),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _PatternScore {
+  List<int> lvPat;
+  Map<String, double> skills;
+  List<double> scoreArr;
+  _PatternScore(this.lvPat, this.skills, this.scoreArr);
 }
