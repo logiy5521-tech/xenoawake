@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'awakening_table.dart';
 import 'localization.dart';
 
+const String kAppVersion = '1.0.0';
+const String kAppCredit = 'Logi@YAMATO';
+
 class ResourceCalculatorScreen extends StatefulWidget {
   final String locale;
   final Function(String) onLocaleChange;
@@ -367,26 +370,15 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
             padding: const EdgeInsets.only(right: 12),
             child: DropdownButton<String>(
               value: widget.locale,
-              dropdownColor: Colors.deepPurple[400],
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+              dropdownColor: Colors.white,
+              icon: const Icon(Icons.language, color: Colors.white),
+              style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w500),
               underline: Container(),
               items: const [
-                DropdownMenuItem(
-                  value: 'ja',
-                  child: Text('日本語', style: TextStyle(color: Colors.white)),
-                ),
-                DropdownMenuItem(
-                  value: 'en',
-                  child: Text('English', style: TextStyle(color: Colors.white)),
-                ),
-                DropdownMenuItem(
-                  value: 'zh',
-                  child: Text('中文', style: TextStyle(color: Colors.white)),
-                ),
-                DropdownMenuItem(
-                  value: 'ko',
-                  child: Text('한국어', style: TextStyle(color: Colors.white)),
-                ),
+                DropdownMenuItem(value: 'ja', child: Text('日本語')),
+                DropdownMenuItem(value: 'en', child: Text('English')),
+                DropdownMenuItem(value: 'zh', child: Text('中文')),
+                DropdownMenuItem(value: 'ko', child: Text('한국어')),
               ],
               onChanged: (value) {
                 if (value != null) widget.onLocaleChange(value);
@@ -399,18 +391,43 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
         child: Container(
           constraints: const BoxConstraints(maxWidth: 1000),
           padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                _buildInputCard(loc),
-                if (result != null) ...[
-                  const SizedBox(height: 20),
-                  _buildResultCard(loc),
-                  const SizedBox(height: 20),
-                  _buildResourceSummary(loc),
-                ],
-              ],
-            ),
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildInputCard(loc),
+                      if (result != null) ...[
+                        const SizedBox(height: 20),
+                        _buildResultCard(loc),
+                        const SizedBox(height: 20),
+                        _buildResourceSummary(loc),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              // フッター部分
+              Padding(
+                padding: const EdgeInsets.only(top: 16, bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Created by $kAppCredit',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                      child: Text('v$kAppVersion', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
