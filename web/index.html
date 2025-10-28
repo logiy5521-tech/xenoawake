@@ -2,19 +2,6 @@
 <html>
 
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
@@ -33,71 +20,40 @@
   <title>異獣ペット覚醒計算ツール</title>
   <link rel="manifest" href="manifest.json">
 
-  <script>
-    // The value below is injected by flutter build, do not touch.
-    var serviceWorkerVersion = null;
-  </script>
-  <!-- This script adds the flutter initialization JS code -->
-  <script src="flutter.js" defer></script>
+  <!-- IME制御用スタイル -->
+  <style>
+    input[type="text"]:not([inputmode="text"]) {
+      ime-mode: disabled !important;
+      -webkit-ime-mode: disabled !important;
+      -moz-ime-mode: disabled !important;
+      -ms-ime-mode: disabled !important;
+    }
+
+    input[inputmode="numeric"],
+    input[inputmode="decimal"] {
+      ime-mode: disabled !important;
+      -webkit-ime-mode: disabled !important;
+      -moz-ime-mode: disabled !important;
+      -ms-ime-mode: disabled !important;
+    }
+
+    flt-text-editing-host input {
+      ime-mode: auto !important;
+    }
+
+    flt-text-editing-host input[inputmode="numeric"],
+    flt-text-editing-host input[inputmode="decimal"] {
+      ime-mode: disabled !important;
+      -webkit-ime-mode: disabled !important;
+      -moz-ime-mode: disabled !important;
+      -ms-ime-mode: disabled !important;
+    }
+  </style>
 </head>
 
 <body>
   <script>
-    window.addEventListener('load', function (ev) {
-      // Download main.dart.js
-      _flutter.loader.loadEntrypoint({
-        serviceWorker: {
-          serviceWorkerVersion: serviceWorkerVersion,
-        },
-        onEntrypointLoaded: function (engineInitializer) {
-          engineInitializer.initializeEngine().then(function (appRunner) {
-            appRunner.runApp();
-          });
-        }
-      });
-    });
-  </script>
-
-  <!-- IME制御用スクリプト -->
-  <script>
-    // Flutter Web用のIME制御
-    window.flutterConfiguration = {
-      canvasKitBaseUrl: "https://www.gstatic.com/flutter-canvaskit/"
-    };
-
-    // IMEを強制的にOFFにする
-    const style = document.createElement('style');
-    style.textContent = `
-      input[type="text"]:not([inputmode="text"]) {
-        ime-mode: disabled !important;
-        -webkit-ime-mode: disabled !important;
-        -moz-ime-mode: disabled !important;
-        -ms-ime-mode: disabled !important;
-      }
-      
-      input[inputmode="numeric"],
-      input[inputmode="decimal"] {
-        ime-mode: disabled !important;
-        -webkit-ime-mode: disabled !important;
-        -moz-ime-mode: disabled !important;
-        -ms-ime-mode: disabled !important;
-      }
-      
-      flt-text-editing-host input {
-        ime-mode: auto !important;
-      }
-      
-      flt-text-editing-host input[inputmode="numeric"],
-      flt-text-editing-host input[inputmode="decimal"] {
-        ime-mode: disabled !important;
-        -webkit-ime-mode: disabled !important;
-        -moz-ime-mode: disabled !important;
-        -ms-ime-mode: disabled !important;
-      }
-    `;
-    document.head.appendChild(style);
-
-    // フォーカスイベントでも制御
+    // フォーカスイベントでIME制御
     document.addEventListener('focusin', function (e) {
       if (e.target.tagName === 'INPUT') {
         const inputMode = e.target.getAttribute('inputmode');
@@ -110,6 +66,8 @@
       }
     }, true);
   </script>
+
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 
 </html>
