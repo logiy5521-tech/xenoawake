@@ -13,10 +13,8 @@ const String kAppCredit = 'Logi@YAMATO';
 class _ZenkakuToHankakuFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    // 全角数字を半角数字に変換
     String converted = newValue.text;
 
-    // 全角数字を半角に変換
     const zenkaku = '０１２３４５６７８９';
     const hankaku = '0123456789';
 
@@ -24,7 +22,6 @@ class _ZenkakuToHankakuFormatter extends TextInputFormatter {
       converted = converted.replaceAll(zenkaku[i], hankaku[i]);
     }
 
-    // 数字以外を削除
     converted = converted.replaceAll(RegExp(r'[^0-9]'), '');
 
     return TextEditingValue(
@@ -383,6 +380,15 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       appBar: AppBar(
         title: Text(loc.translate('appTitle')),
         centerTitle: true,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(
+            child: Text(
+              kAppCredit,
+              style: const TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -428,20 +434,10 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 16, bottom: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Created by $kAppCredit',
-                      style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-                      child: Text('v$kAppVersion', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                    ),
-                  ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                  child: Text('v$kAppVersion', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                 ),
               ),
             ],
@@ -473,7 +469,10 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Text('${loc.translate('petType')}:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  '${loc.translate('mainAndHelperPet')}:',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(width: 16),
                 Flexible(
                   child: ChoiceChip(
