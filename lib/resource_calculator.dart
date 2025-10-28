@@ -482,7 +482,8 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
                         ),
                         const SizedBox(height: 6),
                         DropdownButtonFormField<String>(
-                          value: selectedMainAwakening,
+                          key: ValueKey(selectedMainAwakening),
+                          initialValue: selectedMainAwakening,
                           items: awakeningTable
                               .map((data) => DropdownMenuItem(value: data.level, child: Text(data.level)))
                               .toList(),
@@ -515,7 +516,8 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
                         ),
                         const SizedBox(height: 6),
                         DropdownButtonFormField<String>(
-                          value: selectedHelperAwakening,
+                          key: ValueKey(selectedHelperAwakening),
+                          initialValue: selectedHelperAwakening,
                           items: awakeningTable
                               .map((data) => DropdownMenuItem(value: data.level, child: Text(data.level)))
                               .toList(),
