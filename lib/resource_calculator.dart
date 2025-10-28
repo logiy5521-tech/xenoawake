@@ -297,7 +297,6 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
 
     // ステップ1: 共鳴確率を100%まで配分（ヘルパーから優先）
     double currentResonanceRate = 10.0;
-    List<int> resonanceRateAssignment = []; // どのペットに共鳴確率を割り当てたか記録
 
     // ヘルパーから順に共鳴確率を割り当て
     for (int i = 1; i < allocation.length; i++) {
@@ -306,7 +305,6 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
         if (currentResonanceRate + value <= 100.0) {
           allocation[i].add('共鳴確率');
           currentResonanceRate += value;
-          resonanceRateAssignment.add(i);
         }
       }
     }
@@ -317,7 +315,6 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       if (currentResonanceRate + value <= 100.0) {
         allocation[0].add('共鳴確率');
         currentResonanceRate += value;
-        resonanceRateAssignment.add(0);
       }
     }
 
@@ -580,7 +577,7 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
         const SizedBox(height: 6),
         TextField(
           controller: controller,
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: false, signed: false),
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: InputDecoration(
             filled: true,
@@ -780,14 +777,15 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
     for (int i = 0; i < petSkills.length; i++) {
       final data = (i == 0) ? mainData : helperData;
       for (String skillType in petSkills[i]) {
-        if (skillType == '共鳴確率')
+        if (skillType == '共鳴確率') {
           totalResonanceRate += data.resonanceRate;
-        else if (skillType == '共鳴ダメージ')
+        } else if (skillType == '共鳴ダメージ') {
           totalResonanceDamage += data.resonanceDamage;
-        else if (skillType == '氷結')
+        } else if (skillType == '氷結') {
           totalFreeze += data.freeze;
-        else if (skillType == '衰弱')
+        } else if (skillType == '衰弱') {
           totalWeakness += data.freeze;
+        }
       }
     }
 
