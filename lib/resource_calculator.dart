@@ -9,6 +9,31 @@ import 'localization.dart';
 const String kAppVersion = '1.0.0';
 const String kAppCredit = 'Logi@YAMATO';
 
+// 全角数字を半角数字に変換するフォーマッター
+class _ZenkakuToHankakuFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    // 全角数字を半角数字に変換
+    String converted = newValue.text;
+
+    // 全角数字を半角に変換
+    const zenkaku = '０１２３４５６７８９';
+    const hankaku = '0123456789';
+
+    for (int i = 0; i < zenkaku.length; i++) {
+      converted = converted.replaceAll(zenkaku[i], hankaku[i]);
+    }
+
+    // 数字以外を削除
+    converted = converted.replaceAll(RegExp(r'[^0-9]'), '');
+
+    return TextEditingValue(
+      text: converted,
+      selection: TextSelection.collapsed(offset: converted.length),
+    );
+  }
+}
+
 class ResourceCalculatorScreen extends StatefulWidget {
   final String locale;
   final Function(String) onLocaleChange;
@@ -298,10 +323,8 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       allocation.add([]);
     }
 
-    // ステップ1: 共鳴確率を100%まで配分（ヘルパーから優先）
     double currentResonanceRate = 10.0;
 
-    // ヘルパーから順に共鳴確率を割り当て
     for (int i = 1; i < allocation.length; i++) {
       if (allocation[i].length < petSlots[i]) {
         double value = helperData.resonanceRate;
@@ -312,7 +335,6 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       }
     }
 
-    // まだ100%に達していない場合、メインにも割り当て
     if (currentResonanceRate < 100.0 && allocation[0].length < petSlots[0]) {
       double value = mainData.resonanceRate;
       if (currentResonanceRate + value <= 100.0) {
@@ -321,11 +343,9 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       }
     }
 
-    // 共鳴確率が100%に達した後の枠は「自由枠」に
     for (int i = 0; i < allocation.length; i++) {
       if (allocation[i].length < petSlots[i]) {
         double value = (i == 0) ? mainData.resonanceRate : helperData.resonanceRate;
-        // 共鳴確率を既に持っていない場合のみチェック
         if (!allocation[i].contains('共鳴確率')) {
           if (currentResonanceRate + value > 100.0) {
             allocation[i].add('自由枠');
@@ -334,14 +354,12 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       }
     }
 
-    // ステップ2: 共鳴ダメージを全ペット最大化
     for (int i = 0; i < allocation.length; i++) {
       if (allocation[i].length < petSlots[i] && !allocation[i].contains('共鳴ダメージ')) {
         allocation[i].add('共鳴ダメージ');
       }
     }
 
-    // ステップ3: 残り枠を氷結、衰弱で埋める
     for (int i = 0; i < allocation.length; i++) {
       while (allocation[i].length < petSlots[i]) {
         if (!allocation[i].contains('氷結')) {
@@ -408,7 +426,6 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
                   ),
                 ),
               ),
-              // フッター部分
               Padding(
                 padding: const EdgeInsets.only(top: 16, bottom: 8),
                 child: Row(
@@ -446,11 +463,11 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: _buildTextField(loc, loc.translate('core'), _coreController)),
+                Expanded(child: _buildTextField(loc, loc.translate('core'), _coreController, '例: 4')),
                 const SizedBox(width: 12),
-                Expanded(child: _buildTextField(loc, loc.translate('crystal'), _crystalController)),
+                Expanded(child: _buildTextField(loc, loc.translate('crystal'), _crystalController, '例: 2000')),
                 const SizedBox(width: 12),
-                Expanded(child: _buildTextField(loc, '${loc.translate('biscuit')} (K)', _biscuitController)),
+                Expanded(child: _buildTextField(loc, '${loc.translate('biscuit')} (K)', _biscuitController, '例: 2000')),
               ],
             ),
             const SizedBox(height: 20),
@@ -588,7 +605,7 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
     );
   }
 
-  Widget _buildTextField(AppLocalizations loc, String label, TextEditingController controller) {
+  Widget _buildTextField(AppLocalizations loc, String label, TextEditingController controller, String hint) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -597,12 +614,14 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
         TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: false, signed: false),
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: [_ZenkakuToHankakuFormatter(), FilteringTextInputFormatter.digitsOnly],
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.grey[100],
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
           ),
         ),
       ],
