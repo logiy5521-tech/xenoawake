@@ -80,8 +80,6 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       _crystalController.text = prefs.getString('res_crystal') ?? '';
       _biscuitController.text = prefs.getString('res_biscuit') ?? '';
       isSameType = prefs.getBool('res_isSameType') ?? true;
-      selectedMainAwakening = prefs.getString('res_mainAwakening') ?? '覚醒0';
-      selectedHelperAwakening = prefs.getString('res_helperAwakening') ?? '覚醒0';
     });
     if (_coreController.text.isNotEmpty && _crystalController.text.isNotEmpty && _biscuitController.text.isNotEmpty) {
       _autoCalculate();
@@ -94,8 +92,40 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
     await prefs.setString('res_crystal', _crystalController.text);
     await prefs.setString('res_biscuit', _biscuitController.text);
     await prefs.setBool('res_isSameType', isSameType);
-    await prefs.setString('res_mainAwakening', selectedMainAwakening);
-    await prefs.setString('res_helperAwakening', selectedHelperAwakening);
+  }
+
+  // 別種モード用の自動覚醒レベル計算
+  void _calculateOptimalAwakeningLevels(int core, int crystal) {
+    // スキル枠が上がる覚醒レベルの優先順位（ヘルパー優先）
+    final priorityLevels = ['覚醒0', '黄2', '黄4', '赤1', '赤3', '赤5'];
+
+    String bestHelperLevel = '覚醒0';
+    String bestMainLevel = '覚醒0';
+
+    // ヘルパーを優先して上げる
+    for (String level in priorityLevels.reversed) {
+      final data = awakeningTable.firstWhere((d) => d.level == level);
+      if (data.totalCore <= core && data.totalCrystal <= crystal) {
+        bestHelperLevel = level;
+        break;
+      }
+    }
+
+    // 残りのリソースでメインを上げる
+    final helperData = awakeningTable.firstWhere((d) => d.level == bestHelperLevel);
+    int remainingCore = core - helperData.totalCore;
+    int remainingCrystal = crystal - helperData.totalCrystal;
+
+    for (String level in awakeningTable.map((d) => d.level).toList().reversed) {
+      final data = awakeningTable.firstWhere((d) => d.level == level);
+      if (data.totalCore <= remainingCore && data.totalCrystal <= remainingCrystal) {
+        bestMainLevel = level;
+        break;
+      }
+    }
+
+    selectedHelperAwakening = bestHelperLevel;
+    selectedMainAwakening = bestMainLevel;
   }
 
   void _autoCalculate() {
@@ -114,6 +144,11 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
     final core = int.tryParse(coreText) ?? 0;
     final crystal = int.tryParse(crystalText) ?? 0;
     final biscuit = (int.tryParse(biscuitText) ?? 0) * 1000;
+
+    // 別種モードの場合、自動で覚醒レベルを計算
+    if (!isSameType) {
+      _calculateOptimalAwakeningLevels(core, crystal);
+    }
 
     _calculate(core, crystal, biscuit);
     _saveValues();
@@ -380,12 +415,13 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       appBar: AppBar(
         title: Text(loc.translate('appTitle')),
         centerTitle: true,
+        leadingWidth: 100,
         leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
+          padding: const EdgeInsets.only(left: 8),
           child: Center(
             child: Text(
               kAppCredit,
-              style: const TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w500),
+              style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -501,102 +537,28 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
                 ),
               ],
             ),
-            if (!isSameType) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          loc.translate('mainPetAwakeningLevel'),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(selectedMainAwakening),
-                          initialValue: selectedMainAwakening,
-                          items: awakeningTable
-                              .map((data) => DropdownMenuItem(value: data.level, child: Text(data.level)))
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                selectedMainAwakening = value;
-                                _autoCalculate();
-                              });
-                            }
-                          },
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.grey[100],
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          loc.translate('helperPetAwakeningLevel'),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(selectedHelperAwakening),
-                          initialValue: selectedHelperAwakening,
-                          items: awakeningTable
-                              .map((data) => DropdownMenuItem(value: data.level, child: Text(data.level)))
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                selectedHelperAwakening = value;
-                                _autoCalculate();
-                              });
-                            }
-                          },
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.grey[100],
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (resourceWarning != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red[50],
-                    border: Border.all(color: Colors.red[300]!),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.red[700]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          resourceWarning!,
-                          style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
+            if (!isSameType && resourceWarning != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  border: Border.all(color: Colors.red[300]!),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red[700]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        resourceWarning!,
+                        style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ],
         ),
@@ -645,27 +607,59 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
                   loc.translate('referenceSetup'),
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.red[400], borderRadius: BorderRadius.circular(16)),
-                      child: Text(
-                        '${loc.translate('awakening')}: ${result!.mainAwakening}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                if (isSameType)
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.red[400], borderRadius: BorderRadius.circular(16)),
+                        child: Text(
+                          '${loc.translate('awakening')}: ${result!.mainAwakening}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.green[400], borderRadius: BorderRadius.circular(16)),
-                      child: Text(
-                        '${loc.translate('skillSlots')}: ${result!.totalSkillSlots}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.green[400], borderRadius: BorderRadius.circular(16)),
+                        child: Text(
+                          '${loc.translate('skillSlots')}: ${result!.totalSkillSlots}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.red[400], borderRadius: BorderRadius.circular(12)),
+                        child: Text(
+                          '${loc.translate('mainPet')} ${loc.translate('awakening')}: ${result!.mainAwakening}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.blue[400], borderRadius: BorderRadius.circular(12)),
+                        child: Text(
+                          '${loc.translate('helperPet')} ${loc.translate('awakening')}: ${result!.helperAwakening}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.green[400], borderRadius: BorderRadius.circular(12)),
+                        child: Text(
+                          '${loc.translate('skillSlots')}: ${result!.totalSkillSlots}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
