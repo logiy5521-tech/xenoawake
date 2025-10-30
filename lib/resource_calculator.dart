@@ -165,7 +165,7 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
         continue;
       }
 
-      int maxHelpers = _computeMaxHelpers(core); // 修正: 所持コア総量を渡す
+      int maxHelpers = _computeMaxHelpers(core);
       for (int helpers = 2; helpers <= maxHelpers; helpers++) {
         var levelOpt = _optimizePetLevels(biscuit, helpers);
         double score = (levelOpt['totalSlots'] * 1000 + awk * 10 + helpers * 0.1).toDouble();
@@ -219,7 +219,7 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       return;
     }
 
-    int maxHelpers = _computeMaxHelpers(core); // 修正: 所持コア総量を渡す
+    int maxHelpers = _computeMaxHelpers(core);
     var levelOpt = _optimizePetLevels(biscuit, maxHelpers);
 
     result = CalculationResult(
@@ -412,26 +412,23 @@ class _ResourceCalculatorScreenState extends State<ResourceCalculatorScreen> {
       appBar: AppBar(
         title: GestureDetector(
           onTap: _onTitleTapped,
-          child: Row(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                kAppCredit,
-                style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                '${loc.translate('appTitle')} - $kAppCredit',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(width: 16),
-              Text(loc.translate('appTitle')),
-              if (isSecretMode) ...[
-                const SizedBox(width: 10),
+              if (isSecretMode)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: Colors.orange[400], borderRadius: BorderRadius.circular(10)),
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.orange[400], borderRadius: BorderRadius.circular(8)),
                   child: const Text(
                     '実験機能',
-                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ],
             ],
           ),
         ),
